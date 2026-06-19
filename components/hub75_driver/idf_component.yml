@@ -1,0 +1,5 @@
+dependencies:
+  esphome/esp-hub75:
+    git: https://github.com/esphome-libs/esp-hub75.git
+    path: components/hub75
+    version: "*"

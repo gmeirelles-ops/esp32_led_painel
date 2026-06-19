@@ -1,0 +1,14 @@
+{
+  "idf.openOcdConfigs": [
+    "interface/ftdi/esp_ftdi.cfg",
+    "target/esp32s3.cfg"
+  ],
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32s3"
+  },
+  "idf.buildPath": "/home/meirelles/esp32_led_painel-build",
+  "idf.flashType": "UART",
+  "idf.currentSetup": "/home/meirelles/esp/esp-idf",
+  "idf.monitorBaudRate": "115200",
+  "idf.port": "/dev/ttyACM0"
+}

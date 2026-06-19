@@ -1,0 +1,6 @@
+# Shared defaults (target chip in sdkconfig.defaults.esp32s3)
+
+# Adafruit MatrixPortal S3 — 8 MB flash (board ships with 8 MB)
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# CONFIG_PARTITION_TABLE_SINGLE_APP is not set
