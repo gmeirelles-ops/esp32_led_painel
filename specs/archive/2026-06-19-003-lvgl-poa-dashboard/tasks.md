@@ -34,4 +34,4 @@
 
 - [X] T014 `idf.py -B ~/esp32_led_painel-build build` PASS
 
-**Hardware validation**: pending user-authorized flash on MatrixPortal S3.
+**Hardware validation**: validated on MatrixPortal S3 (clock + weather POA, Jun 2026).

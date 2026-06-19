@@ -18,6 +18,7 @@ build/
 managed_components/
 sdkconfig
 sdkconfig.old
+sdkconfig.defaults.local
 *.elf
 *.bin
 *.map

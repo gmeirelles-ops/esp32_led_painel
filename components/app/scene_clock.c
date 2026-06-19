@@ -1,7 +1,6 @@
 #include "scene_clock.h"
 #include "display_lvgl.h"
 
-#include "esp_timer.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <time.h>
@@ -12,7 +11,7 @@ static lv_obj_t *s_date;
 static lv_obj_t *s_err;
 static clock_sync_status_t s_sync = CLOCK_SYNC_PENDING;
 static bool s_wifi;
-static esp_timer_handle_t s_tick;
+static lv_timer_t *s_tick;
 
 static void refresh(void)
 {
@@ -44,12 +43,16 @@ static void refresh(void)
     lv_label_set_text(s_date, buf);
 }
 
-static void tick_cb(void *arg)
+static void tick_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    refresh();
+}
+
+static void async_refresh(void *arg)
 {
     (void)arg;
-    display_lvgl_lock();
     refresh();
-    display_lvgl_unlock();
 }
 
 esp_err_t scene_clock_create(void)
@@ -78,28 +81,21 @@ esp_err_t scene_clock_create(void)
     lv_obj_align(s_err, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(s_err, LV_OBJ_FLAG_HIDDEN);
 
+    s_tick = lv_timer_create(tick_cb, 1000, NULL);
     display_lvgl_unlock();
-
-    const esp_timer_create_args_t args = {.callback = tick_cb, .name = "clock_tick"};
-    ESP_ERROR_CHECK(esp_timer_create(&args, &s_tick));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(s_tick, 1000000));
     return ESP_OK;
 }
 
 void scene_clock_set_wifi(bool up)
 {
     s_wifi = up;
-    display_lvgl_lock();
-    refresh();
-    display_lvgl_unlock();
+    display_lvgl_async(async_refresh, NULL);
 }
 
 void scene_clock_set_sync(clock_sync_status_t st)
 {
     s_sync = st;
-    display_lvgl_lock();
-    refresh();
-    display_lvgl_unlock();
+    display_lvgl_async(async_refresh, NULL);
 }
 
 void scene_clock_show(bool visible)

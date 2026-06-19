@@ -20,6 +20,7 @@ static const char *TAG_HTTP = "http_cli";
 static EventGroupHandle_t s_wifi_events;
 static bool s_wifi_connected;
 static bool s_sntp_synced;
+static bool s_sntp_started;
 static app_connectivity_cb_t s_cb;
 static void *s_cb_ctx;
 
@@ -41,6 +42,7 @@ static void notify(app_connectivity_event_t evt)
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
+    (void)data;
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
@@ -106,6 +108,9 @@ static void sntp_sync_cb(struct timeval *tv)
 
 esp_err_t sntp_service_start(const char *tz)
 {
+    if (s_sntp_started) {
+        return ESP_OK;
+    }
     if (tz && tz[0]) {
         setenv("TZ", tz, 1);
         tzset();
@@ -114,6 +119,7 @@ esp_err_t sntp_service_start(const char *tz)
     esp_sntp_setservername(0, "pool.ntp.org");
     esp_sntp_set_time_sync_notification_cb(sntp_sync_cb);
     esp_sntp_init();
+    s_sntp_started = true;
     return ESP_OK;
 }
 
@@ -129,6 +135,30 @@ bool sntp_service_is_synced(void)
     return s_sntp_synced;
 }
 
+typedef struct {
+    char *out;
+    size_t out_len;
+    size_t written;
+} http_read_ctx_t;
+
+static esp_err_t http_event_handler(esp_http_client_event_t *evt)
+{
+    http_read_ctx_t *ctx = (http_read_ctx_t *)evt->user_data;
+    if (ctx == NULL) {
+        return ESP_OK;
+    }
+    if (evt->event_id == HTTP_EVENT_ON_DATA && evt->data_len > 0) {
+        size_t space = ctx->out_len - 1 - ctx->written;
+        size_t copy = evt->data_len < space ? evt->data_len : space;
+        if (copy > 0) {
+            memcpy(ctx->out + ctx->written, evt->data, copy);
+            ctx->written += copy;
+            ctx->out[ctx->written] = '\0';
+        }
+    }
+    return ESP_OK;
+}
+
 esp_err_t http_get_string(const char *url, char *out, size_t out_len)
 {
     if (url == NULL || out == NULL || out_len == 0) {
@@ -136,31 +166,40 @@ esp_err_t http_get_string(const char *url, char *out, size_t out_len)
     }
     out[0] = '\0';
 
+    http_read_ctx_t ctx = {
+        .out = out,
+        .out_len = out_len,
+        .written = 0,
+    };
+
     esp_http_client_config_t cfg = {
         .url = url,
-        .timeout_ms = 10000,
+        .timeout_ms = 15000,
         .crt_bundle_attach = esp_crt_bundle_attach,
+        .event_handler = http_event_handler,
+        .user_data = &ctx,
+        .buffer_size = 2048,
     };
+
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (client == NULL) {
         return ESP_ERR_NO_MEM;
     }
 
-    esp_err_t err = esp_http_client_open(client, 0);
+    esp_err_t err = esp_http_client_perform(client);
+    int status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+
     if (err != ESP_OK) {
-        esp_http_client_cleanup(client);
+        ESP_LOGE(TAG_HTTP, "perform failed: %s", esp_err_to_name(err));
         return err;
     }
-    int len = esp_http_client_fetch_headers(client);
-    if (len < 0 || (size_t)len >= out_len) {
-        esp_http_client_cleanup(client);
+    if (status != 200) {
+        ESP_LOGE(TAG_HTTP, "HTTP status %d", status);
         return ESP_FAIL;
     }
-    int read = esp_http_client_read(client, out, out_len - 1);
-    esp_http_client_cleanup(client);
-    if (read <= 0) {
+    if (ctx.written == 0) {
         return ESP_FAIL;
     }
-    out[read] = '\0';
     return ESP_OK;
 }

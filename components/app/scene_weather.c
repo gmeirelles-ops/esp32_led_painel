@@ -3,12 +3,14 @@
 
 #include "lvgl.h"
 #include <stdio.h>
+#include <string.h>
 
 static lv_obj_t *s_root;
 static lv_obj_t *s_city;
 static lv_obj_t *s_temp;
 static lv_obj_t *s_cond;
 static lv_obj_t *s_err;
+static weather_view_t s_view;
 
 static void refresh(const weather_view_t *view)
 {
@@ -28,6 +30,12 @@ static void refresh(const weather_view_t *view)
     snprintf(buf, sizeof(buf), "%s%d°C", view->stale ? "~" : "", view->temp_c);
     lv_label_set_text(s_temp, buf);
     lv_label_set_text(s_cond, view->condition ? view->condition : "");
+}
+
+static void async_refresh(void *arg)
+{
+    (void)arg;
+    refresh(&s_view);
 }
 
 esp_err_t scene_weather_create(void)
@@ -68,9 +76,11 @@ esp_err_t scene_weather_create(void)
 
 void scene_weather_update(const weather_view_t *view)
 {
-    display_lvgl_lock();
-    refresh(view);
-    display_lvgl_unlock();
+    if (view == NULL) {
+        return;
+    }
+    s_view = *view;
+    display_lvgl_async(async_refresh, NULL);
 }
 
 void scene_weather_show(bool visible)

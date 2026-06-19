@@ -2,6 +2,7 @@
 #include "hub75_driver.h"
 
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -13,6 +14,9 @@ static const char *TAG = "display_lvgl";
 static SemaphoreHandle_t s_lvgl_mux;
 static lv_display_t *s_disp;
 static TaskHandle_t s_lvgl_task;
+
+/* Full-frame buffer: one flush per refresh (128×64 RGB565) */
+static lv_color_t s_fb[128 * 64];
 
 static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
@@ -31,11 +35,18 @@ static void lvgl_tick_cb(void *arg)
 static void lvgl_task_fn(void *arg)
 {
     (void)arg;
+    esp_task_wdt_add(NULL);
     while (true) {
         display_lvgl_lock();
-        lv_timer_handler();
+        uint32_t delay_ms = lv_timer_handler();
         display_lvgl_unlock();
-        vTaskDelay(pdMS_TO_TICKS(5));
+        esp_task_wdt_reset();
+        if (delay_ms < 5) {
+            delay_ms = 5;
+        } else if (delay_ms > 500) {
+            delay_ms = 500;
+        }
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
     }
 }
 
@@ -57,8 +68,7 @@ esp_err_t display_lvgl_init(void)
         return ESP_ERR_NO_MEM;
     }
 
-    static lv_color_t buf1[128 * 16];
-    lv_display_set_buffers(s_disp, buf1, NULL, sizeof(buf1), LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_buffers(s_disp, s_fb, NULL, sizeof(s_fb), LV_DISPLAY_RENDER_MODE_FULL);
     lv_display_set_flush_cb(s_disp, lvgl_flush_cb);
     lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_RGB565);
 
@@ -70,12 +80,12 @@ esp_err_t display_lvgl_init(void)
     ESP_ERROR_CHECK(esp_timer_create(&tick_args, &tick_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(tick_timer, 5000));
 
-    BaseType_t ok = xTaskCreate(lvgl_task_fn, "lvgl", 4096, NULL, 4, &s_lvgl_task);
+    BaseType_t ok = xTaskCreatePinnedToCore(lvgl_task_fn, "lvgl", 8192, NULL, 4, &s_lvgl_task, 1);
     if (ok != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
 
-    ESP_LOGI(TAG, "LVGL %dx%d ready", hub75_driver_width(), hub75_driver_height());
+    ESP_LOGI(TAG, "LVGL %dx%d ready (full frame, core 1)", hub75_driver_width(), hub75_driver_height());
     return ESP_OK;
 }
 
@@ -96,4 +106,9 @@ void display_lvgl_unlock(void)
 lv_obj_t *display_lvgl_screen(void)
 {
     return lv_display_get_screen_active(s_disp);
+}
+
+void display_lvgl_async(void (*fn)(void *), void *user_data)
+{
+    lv_async_call(fn, user_data);
 }

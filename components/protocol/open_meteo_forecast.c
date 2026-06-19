@@ -38,11 +38,22 @@ const char *wmo_condition_pt(int code)
     return "Clima";
 }
 
-static const char *find_key(const char *json, const char *key)
+static const char *find_key_in_object(const char *json, const char *object_key, const char *field_key)
 {
-    char pattern[48];
-    snprintf(pattern, sizeof(pattern), "\"%s\":", key);
-    return strstr(json, pattern);
+    char obj_pattern[32];
+    snprintf(obj_pattern, sizeof(obj_pattern), "\"%s\":", object_key);
+    const char *obj = strstr(json, obj_pattern);
+    if (obj == NULL) {
+        return NULL;
+    }
+    obj = strchr(obj, '{');
+    if (obj == NULL) {
+        return NULL;
+    }
+
+    char field_pattern[48];
+    snprintf(field_pattern, sizeof(field_pattern), "\"%s\":", field_key);
+    return strstr(obj, field_pattern);
 }
 
 esp_err_t open_meteo_fetch_current(float lat, float lon, const char *tz, open_meteo_current_t *out)
@@ -58,26 +69,34 @@ esp_err_t open_meteo_fetch_current(float lat, float lon, const char *tz, open_me
              "weather_code&timezone=%s",
              lat, lon, tz ? tz : "America/Sao_Paulo");
 
-    char body[4096];
-    esp_err_t err = http_get_string(url, body, sizeof(body));
+    char *body = malloc(4096);
+    if (body == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t err = http_get_string(url, body, 4096);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "http fail");
+        free(body);
         return err;
     }
 
-    const char *temp_ptr = find_key(body, "temperature_2m");
-    const char *code_ptr = find_key(body, "weather_code");
+    const char *temp_ptr = find_key_in_object(body, "current", "temperature_2m");
+    const char *code_ptr = find_key_in_object(body, "current", "weather_code");
     if (temp_ptr == NULL || code_ptr == NULL) {
+        free(body);
         return ESP_FAIL;
     }
     temp_ptr = strchr(temp_ptr, ':');
     code_ptr = strchr(code_ptr, ':');
     if (temp_ptr == NULL || code_ptr == NULL) {
+        free(body);
         return ESP_FAIL;
     }
     out->temp_c = (int)lround(strtod(temp_ptr + 1, NULL));
     out->weather_code = (int)strtol(code_ptr + 1, NULL, 10);
     out->valid = true;
+    free(body);
     ESP_LOGI(TAG, "weather %dC code=%d", out->temp_c, out->weather_code);
     return ESP_OK;
 }
