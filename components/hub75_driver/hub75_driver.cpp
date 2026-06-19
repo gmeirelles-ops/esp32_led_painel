@@ -73,3 +73,13 @@ extern "C" esp_err_t hub75_driver_draw_pixel(uint16_t x, uint16_t y, uint8_t r, 
     s_driver->set_pixel(x, y, r, g, b);
     return ESP_OK;
 }
+
+extern "C" esp_err_t hub75_driver_draw_pixels_rgb565(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                                     const uint8_t *buffer)
+{
+    if (s_driver == nullptr || buffer == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_driver->draw_pixels(x, y, w, h, buffer, Hub75PixelFormat::RGB565, Hub75ColorOrder::RGB, false);
+    return ESP_OK;
+}

@@ -1,4 +1,24 @@
 dependencies:
+  app:
+    dependencies: []
+    source:
+      path: components/app
+      type: local
+    version: '*'
+  connectivity:
+    dependencies: []
+    source:
+      path: components/connectivity
+      type: local
+    version: '*'
+  display_lvgl:
+    dependencies:
+    - name: lvgl/lvgl
+      version: ^9.2.0
+    source:
+      path: components/display_lvgl
+      type: local
+    version: '*'
   esphome/esp-hub75:
     component_hash: 6e7613a5e6f7b1eba9dad2415371f0453dca2ce4da173b59537ad6f36ca7bea5
     dependencies:
@@ -29,9 +49,27 @@ dependencies:
     source:
       type: idf
     version: 6.1.0
+  lvgl/lvgl:
+    component_hash: 184e532558c1c45fefed631f3e235423d22582aafb4630f3e8885c35281a49ae
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 9.5.0
+  storage:
+    dependencies: []
+    source:
+      path: components/storage
+      type: local
+    version: '*'
 direct_dependencies:
+- app
+- connectivity
+- display_lvgl
 - esphome/esp-hub75
 - hub75_driver
-manifest_hash: 8279d8aa3dbf756b95070b8cd8f75fbd926368fef6a4a2654062bf5cfef7b5bd
+- lvgl/lvgl
+- storage
+manifest_hash: 72b956fc38b8d452d411da4b436a5d8bf580051041a28a7d1cd006cb160ada9d
 target: esp32s3
 version: 3.0.0

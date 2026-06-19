@@ -1,0 +1,23 @@
+menu "Painel LED — configuração"
+
+config PAINEL_WIFI_SSID
+    string "Wi-Fi SSID (lab fallback quando NVS vazio)"
+    default ""
+    help
+        Credencial de laboratório. Não commitar valores reais.
+
+config PAINEL_WIFI_PASSWORD
+    string "Wi-Fi password (lab fallback)"
+    default ""
+    help
+        Senha de laboratório. Não commitar valores reais.
+
+config PAINEL_POA_LAT
+    float "Porto Alegre latitude"
+    default -30.0346
+
+config PAINEL_POA_LON
+    float "Porto Alegre longitude"
+    default -51.2177
+
+endmenu

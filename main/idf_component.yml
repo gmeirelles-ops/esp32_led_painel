@@ -1,3 +1,11 @@
 dependencies:
   hub75_driver:
     path: ../components/hub75_driver
+  display_lvgl:
+    path: ../components/display_lvgl
+  storage:
+    path: ../components/storage
+  connectivity:
+    path: ../components/connectivity
+  app:
+    path: ../components/app
