@@ -1,5 +1,20 @@
 menu "Painel LED — configuração"
 
+    choice PAINEL_TOPOLOGY
+        prompt "Display topology"
+        default PAINEL_TOPOLOGY_SINGLE
+        help
+            Single: one HUB75 module 128×64 (default, hardware validated).
+            2×2: four 128×64 modules in a 2×2 grid (256×128 logical canvas).
+            Panels chain via HUB75; LVGL resolution follows the virtual size.
+
+        config PAINEL_TOPOLOGY_SINGLE
+            bool "Single panel (128×64)"
+
+        config PAINEL_TOPOLOGY_2X2
+            bool "Four panels 2×2 (256×128)"
+    endchoice
+
 config PAINEL_WIFI_SSID
     string "Wi-Fi SSID (lab fallback quando NVS vazio)"
     default ""

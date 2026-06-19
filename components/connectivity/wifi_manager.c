@@ -101,8 +101,14 @@ bool wifi_manager_is_connected(void)
 static void sntp_sync_cb(struct timeval *tv)
 {
     (void)tv;
+    tzset();
     s_sntp_synced = true;
-    ESP_LOGI(TAG_SNTP, "time synced");
+
+    time_t now = time(NULL);
+    struct tm tm_info;
+    localtime_r(&now, &tm_info);
+    ESP_LOGI(TAG_SNTP, "time synced, local time %02d:%02d", tm_info.tm_hour, tm_info.tm_min);
+
     notify(APP_EVT_SNTP_SYNCED);
 }
 
@@ -111,10 +117,7 @@ esp_err_t sntp_service_start(const char *tz)
     if (s_sntp_started) {
         return ESP_OK;
     }
-    if (tz && tz[0]) {
-        setenv("TZ", tz, 1);
-        tzset();
-    }
+    painel_tz_apply(tz);
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, "pool.ntp.org");
     esp_sntp_set_time_sync_notification_cb(sntp_sync_cb);

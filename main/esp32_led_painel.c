@@ -15,7 +15,7 @@ void app_main(void)
     ESP_ERROR_CHECK(painel_storage_init());
     ESP_ERROR_CHECK(hub75_driver_init());
     ESP_ERROR_CHECK(hub75_driver_start());
-    ESP_ERROR_CHECK(hub75_driver_set_brightness(255));
+    ESP_ERROR_CHECK(hub75_driver_set_brightness(50));
 
     ESP_ERROR_CHECK(display_lvgl_init());
     ESP_ERROR_CHECK(wifi_manager_init());

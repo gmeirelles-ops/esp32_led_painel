@@ -7,13 +7,23 @@
 static inline Hub75Config hub75_get_matrixportal_config(void)
 {
     Hub75Config config = {};
-    config.panel_width = CONFIG_HUB75_PANEL_WIDTH;
-    config.panel_height = CONFIG_HUB75_PANEL_HEIGHT;
+    config.panel_width = 128;
+    config.panel_height = 64;
     config.scan_wiring = Hub75ScanWiring::STANDARD_TWO_SCAN;
     config.shift_driver = Hub75ShiftDriver::FM6126A;
-    config.layout_rows = CONFIG_HUB75_LAYOUT_ROWS;
-    config.layout_cols = CONFIG_HUB75_LAYOUT_COLS;
+
+#if CONFIG_PAINEL_TOPOLOGY_2X2
+    config.layout_rows = 2;
+    config.layout_cols = 2;
+    config.layout = Hub75PanelLayout::TOP_LEFT_DOWN_ZIGZAG;
+    const char *topology = "2x2";
+#else
+    config.layout_rows = 1;
+    config.layout_cols = 1;
     config.layout = Hub75PanelLayout::HORIZONTAL;
+    const char *topology = "single";
+#endif
+
     config.min_refresh_rate = CONFIG_HUB75_MIN_REFRESH_RATE;
     config.brightness = CONFIG_HUB75_BRIGHTNESS;
     config.double_buffer = false;
@@ -42,7 +52,10 @@ static inline Hub75Config hub75_get_matrixportal_config(void)
     config.pins.oe = CONFIG_HUB75_PIN_OE;
     config.pins.clk = CONFIG_HUB75_PIN_CLK;
 
-    ESP_LOGI("hub75_board", "matrixportal %ux%u FM6126A", (unsigned)config.panel_width,
-             (unsigned)config.panel_height);
+    const unsigned virtual_w = config.panel_width * config.layout_cols;
+    const unsigned virtual_h = config.panel_height * config.layout_rows;
+    ESP_LOGI("hub75_board", "topology %s panel %ux%u layout %ux%u virtual %ux%u", topology,
+             (unsigned)config.panel_width, (unsigned)config.panel_height, (unsigned)config.layout_rows,
+             (unsigned)config.layout_cols, virtual_w, virtual_h);
     return config;
 }

@@ -19,6 +19,7 @@
 
 static const char *TAG = "app_ctrl";
 static const int WEATHER_INTERVAL_S = 1800;
+static const uint32_t SCENE_FADE_MS = 250;
 
 typedef enum {
     APP_Q_WIFI_UP = 0,
@@ -37,10 +38,109 @@ static esp_timer_handle_t s_weather_timer;
 static QueueHandle_t s_app_queue;
 static TaskHandle_t s_net_task;
 
-static void apply_scene(dash_scene_t scene)
+static const char *scene_name(dash_scene_t scene)
+{
+    switch (scene) {
+    case DASH_SCENE_CLOCK:
+        return "clock";
+    case DASH_SCENE_WEATHER:
+        return "weather";
+    default:
+        return "init";
+    }
+}
+
+static void apply_scene_instant(dash_scene_t scene)
 {
     scene_clock_show(scene == DASH_SCENE_CLOCK);
     scene_weather_show(scene == DASH_SCENE_WEATHER);
+}
+
+typedef struct {
+    dash_scene_t target;
+    lv_obj_t *out;
+    lv_obj_t *in;
+} scene_transition_t;
+
+static scene_transition_t s_transition;
+
+static void fade_anim_cb(void *obj, int32_t v)
+{
+    lv_obj_set_style_opa((lv_obj_t *)obj, (lv_opa_t)v, 0);
+}
+
+static void transition_fade_in_done(lv_anim_t *anim)
+{
+    (void)anim;
+    s_transition.out = NULL;
+    s_transition.in = NULL;
+}
+
+static void transition_fade_out_done(lv_anim_t *anim)
+{
+    (void)anim;
+    dash_scene_t target = s_transition.target;
+    lv_obj_t *out = s_transition.out;
+    lv_obj_t *in = s_transition.in;
+
+    scene_clock_show(target == DASH_SCENE_CLOCK);
+    scene_weather_show(target == DASH_SCENE_WEATHER);
+
+    if (out != NULL) {
+        lv_obj_set_style_opa(out, LV_OPA_COVER, 0);
+        lv_obj_add_flag(out, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (in != NULL) {
+        lv_obj_clear_flag(in, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_opa(in, LV_OPA_TRANSP, 0);
+        lv_anim_t fade_in;
+        lv_anim_init(&fade_in);
+        lv_anim_set_var(&fade_in, in);
+        lv_anim_set_values(&fade_in, LV_OPA_TRANSP, LV_OPA_COVER);
+        lv_anim_set_exec_cb(&fade_in, fade_anim_cb);
+        lv_anim_set_duration(&fade_in, SCENE_FADE_MS);
+        lv_anim_set_completed_cb(&fade_in, transition_fade_in_done);
+        lv_anim_start(&fade_in);
+    }
+}
+
+static void apply_scene(dash_scene_t scene)
+{
+    if (!s_dash.init_complete || scene == s_dash.active) {
+        apply_scene_instant(scene);
+        return;
+    }
+
+    lv_obj_t *out = (s_dash.active == DASH_SCENE_CLOCK) ? scene_clock_root() : scene_weather_root();
+    lv_obj_t *in = (scene == DASH_SCENE_CLOCK) ? scene_clock_root() : scene_weather_root();
+
+    if (out == NULL || in == NULL) {
+        apply_scene_instant(scene);
+        return;
+    }
+
+    if (s_transition.out != NULL) {
+        lv_anim_delete(s_transition.out, fade_anim_cb);
+        s_transition.out = NULL;
+        s_transition.in = NULL;
+    }
+
+    ESP_LOGI(TAG, "scene transition %s -> %s", scene_name(s_dash.active), scene_name(scene));
+
+    s_transition.target = scene;
+    s_transition.out = out;
+    s_transition.in = in;
+
+    display_lvgl_lock();
+    lv_anim_t fade_out;
+    lv_anim_init(&fade_out);
+    lv_anim_set_var(&fade_out, out);
+    lv_anim_set_values(&fade_out, lv_obj_get_style_opa(out, LV_PART_MAIN), LV_OPA_TRANSP);
+    lv_anim_set_exec_cb(&fade_out, fade_anim_cb);
+    lv_anim_set_duration(&fade_out, SCENE_FADE_MS);
+    lv_anim_set_completed_cb(&fade_out, transition_fade_out_done);
+    lv_anim_start(&fade_out);
+    display_lvgl_unlock();
 }
 
 static void dwell_cb(lv_timer_t *timer)
@@ -131,6 +231,22 @@ static void on_connectivity(app_connectivity_event_t evt, void *ctx)
     }
 }
 
+static void connectivity_bootstrap(void)
+{
+    bool wifi = wifi_manager_is_connected();
+    bool synced = sntp_service_is_synced();
+    ESP_LOGI(TAG, "connectivity bootstrap wifi=%d sntp_synced=%d", wifi, synced);
+
+    scene_clock_set_wifi(wifi);
+    if (wifi) {
+        post_evt(APP_Q_WIFI_UP);
+    }
+    if (synced) {
+        scene_clock_set_sync(CLOCK_SYNC_SYNCED);
+        ESP_LOGI(TAG, "clock sync -> SYNCED");
+    }
+}
+
 static void net_worker(void *arg)
 {
     (void)arg;
@@ -152,6 +268,7 @@ static void net_worker(void *arg)
             break;
         case APP_Q_SNTP_SYNCED:
             scene_clock_set_sync(CLOCK_SYNC_SYNCED);
+            ESP_LOGI(TAG, "clock sync -> SYNCED");
             break;
         case APP_Q_SNTP_FAIL:
             scene_clock_set_sync(CLOCK_SYNC_ERROR);
@@ -177,7 +294,7 @@ static void finish_init(void)
     s_dash.init_complete = true;
     s_dash.rotation_enabled = true;
     dashboard_state_set_active(&s_dash, DASH_SCENE_CLOCK);
-    apply_scene(DASH_SCENE_CLOCK);
+    apply_scene_instant(DASH_SCENE_CLOCK);
     display_lvgl_unlock();
 
     display_lvgl_lock();
@@ -204,6 +321,7 @@ static void app_task(void *arg)
 esp_err_t app_controller_start(void)
 {
     ESP_ERROR_CHECK(painel_storage_load_config(&s_cfg));
+    painel_tz_apply(s_cfg.tz);
     dashboard_state_init(&s_dash, s_cfg.dwell_ms);
 
     s_app_queue = xQueueCreate(8, sizeof(app_queue_evt_t));
@@ -216,18 +334,29 @@ esp_err_t app_controller_start(void)
     }
 
     display_lvgl_lock();
-    s_splash = lv_label_create(display_lvgl_screen());
-    lv_label_set_text(s_splash, "Iniciando...");
-    lv_obj_set_style_text_color(s_splash, lv_color_white(), 0);
-    lv_obj_set_style_text_font(s_splash, &lv_font_montserrat_12, 0);
+    s_splash = lv_obj_create(display_lvgl_screen());
+    lv_obj_set_size(s_splash, display_lvgl_hor_res(), display_lvgl_ver_res());
     lv_obj_center(s_splash);
+    lv_obj_set_style_bg_color(s_splash, lv_color_hex(0x0088CC), 0);
+    lv_obj_set_style_bg_opa(s_splash, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_splash, 0, 0);
+    lv_obj_set_style_pad_all(s_splash, 0, 0);
+    lv_obj_t *splash_lbl = lv_label_create(s_splash);
+    lv_label_set_text(splash_lbl, "DIPONTO");
+    lv_obj_set_style_text_color(splash_lbl, lv_color_white(), 0);
+#if CONFIG_LV_FONT_MONTSERRAT_24
+    lv_obj_set_style_text_font(splash_lbl, &lv_font_montserrat_24, 0);
+#else
+    lv_obj_set_style_text_font(splash_lbl, &lv_font_montserrat_14, 0);
+#endif
+    lv_obj_center(splash_lbl);
     display_lvgl_unlock();
 
     ESP_ERROR_CHECK(scene_clock_create());
     ESP_ERROR_CHECK(scene_weather_create());
 
     wifi_manager_set_callback(on_connectivity, NULL);
-    scene_clock_set_wifi(wifi_manager_is_connected());
+    connectivity_bootstrap();
 
     xTaskCreate(app_task, "app", 4096, NULL, 5, NULL);
     ESP_LOGI(TAG, "started dwell=%ums", (unsigned)s_dash.dwell_ms);

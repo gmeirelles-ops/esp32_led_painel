@@ -6,6 +6,7 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 #include <string.h>
+#include <time.h>
 
 static const char *TAG = "storage";
 
@@ -137,4 +138,15 @@ esp_err_t painel_storage_save_weather_cache(const painel_weather_cache_t *cache)
     err = nvs_commit(h);
     nvs_close(h);
     return err;
+}
+
+void painel_tz_apply(const char *tz)
+{
+    const char *posix = PAINEL_POSIX_TZ;
+    if (tz != NULL && tz[0] != '\0' && strchr(tz, '/') == NULL) {
+        posix = tz;
+    }
+    setenv("TZ", posix, 1);
+    tzset();
+    ESP_LOGI(TAG, "timezone %s (from %s)", posix, tz && tz[0] ? tz : PAINEL_DEFAULT_TZ);
 }

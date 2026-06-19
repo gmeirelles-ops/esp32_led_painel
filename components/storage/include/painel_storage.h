@@ -30,6 +30,7 @@ esp_err_t painel_storage_save_config(const painel_config_t *cfg);
 esp_err_t painel_storage_load_wifi(painel_wifi_creds_t *out);
 esp_err_t painel_storage_load_weather_cache(painel_weather_cache_t *out);
 esp_err_t painel_storage_save_weather_cache(const painel_weather_cache_t *cache);
+void painel_tz_apply(const char *tz);
 
 #ifdef __cplusplus
 }

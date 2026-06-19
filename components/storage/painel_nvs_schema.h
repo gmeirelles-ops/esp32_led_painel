@@ -15,4 +15,5 @@
 
 #define PAINEL_CFG_VERSION 2
 #define PAINEL_DEFAULT_TZ "America/Sao_Paulo"
+#define PAINEL_POSIX_TZ "BRT3"
 #define PAINEL_DEFAULT_DWELL_MS 10000
